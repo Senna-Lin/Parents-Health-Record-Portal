@@ -1,0 +1,6 @@
+{
+  "name": "父母血壓監測與異常通知",
+  "description": "這是一款協助子女記錄父母血壓、進行異常血壓檢測與趨勢分析，並在血壓異常時透過 Gmail 發送緊急通知的 App，所有血壓記錄均安全儲存於使用者的 Google Sheets 中。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
