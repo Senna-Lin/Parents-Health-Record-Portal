@@ -5,7 +5,6 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
-    base:'/Parents-Health-Record-Portal/',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
