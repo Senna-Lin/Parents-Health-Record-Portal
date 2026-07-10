@@ -18,124 +18,72 @@ async function sheetsFetch(url: string, accessToken: string, options: RequestIni
 
 export const sheetsService = {
   /**
-   * Find a spreadsheet by name in Google Drive, or create it if not found.
+   * Load a configured spreadsheet by ID and ensure its required tabs exist.
+   * This intentionally does not search Google Drive or create spreadsheet files.
    */
-  async findOrCreateSpreadsheet(accessToken: string, name: string = '父母血壓健康紀錄'): Promise<{ spreadsheetId: string; sheetsInfo: { title: string; sheetId: number }[]; recordsSheetName: string }> {
+  async loadSpreadsheet(accessToken: string, spreadsheetId: string): Promise<{ spreadsheetId: string; sheetsInfo: { title: string; sheetId: number }[]; recordsSheetName: string }> {
     try {
-      // 1. Search for existing spreadsheet in Drive
-      const query = encodeURIComponent(`name = '${name}' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false`);
-      const searchUrl = `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name)`;
-      const searchResult = await sheetsFetch(searchUrl, accessToken);
-
-      if (searchResult.files && searchResult.files.length > 0) {
-        const spreadsheetId = searchResult.files[0].id;
-        // Fetch metadata to get sheets details (titles and sheetIds)
-        const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties(sheetId,title)`;
-        const meta = await sheetsFetch(metaUrl, accessToken);
-        
-        const sheetsInfo = meta.sheets.map((s: any) => ({
-          title: s.properties.title,
-          sheetId: s.properties.sheetId,
-        }));
-
-        // Determine the record sheet dynamically (supporting Google Forms response sheets like "表單回應 1")
-        let recordsSheetName = '血壓記錄';
-        const formResponseSheet = sheetsInfo.find((s: any) => 
-          s.title.includes('表單回應') || 
-          s.title.includes('Form Responses') || 
-          s.title.includes('Responses') || 
-          s.title === '血壓記錄' || 
-          s.title === '血壓紀錄'
-        );
-
-        if (formResponseSheet) {
-          recordsSheetName = formResponseSheet.title;
-        } else if (sheetsInfo.length > 0) {
-          recordsSheetName = sheetsInfo[0].title;
-        }
-
-        // Check if alerts tab exists, if not we will create it via batchUpdate
-        const hasRecordsTab = sheetsInfo.some((s: any) => 
-          s.title === '血壓記錄' || 
-          s.title.includes('表單回應') || 
-          s.title.includes('Form Responses') || 
-          s.title.includes('Responses') || 
-          s.title === '血壓紀錄'
-        );
-        const hasAlertsTab = sheetsInfo.some((s: any) => s.title === '異常通知歷史');
-
-        if (!hasRecordsTab || !hasAlertsTab) {
-          const requests: any[] = [];
-          if (!hasRecordsTab) {
-            requests.push({ addSheet: { properties: { title: '血壓記錄' } } });
-          }
-          if (!hasAlertsTab) {
-            requests.push({ addSheet: { properties: { title: '異常通知歷史' } } });
-          }
-          
-          const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`;
-          await sheetsFetch(updateUrl, accessToken, {
-            method: 'POST',
-            body: JSON.stringify({ requests }),
-          });
-
-          // Fetch updated sheets info
-          const updatedMeta = await sheetsFetch(metaUrl, accessToken);
-          const updatedSheetsInfo = updatedMeta.sheets.map((s: any) => ({
-            title: s.properties.title,
-            sheetId: s.properties.sheetId,
-          }));
-
-          // Initialize headers for newly created tabs
-          await this.initializeSheetHeaders(accessToken, spreadsheetId, !hasRecordsTab, !hasAlertsTab);
-
-          return { spreadsheetId, sheetsInfo: updatedSheetsInfo, recordsSheetName };
-        }
-
-        return { spreadsheetId, sheetsInfo, recordsSheetName };
-      }
-
-      // 2. Create a new Spreadsheet if not found
-      const createUrl = 'https://sheets.googleapis.com/v4/spreadsheets';
-      const createBody = {
-        properties: {
-          title: name,
-        },
-        sheets: [
-          {
-            properties: {
-              title: '血壓記錄',
-            },
-          },
-          {
-            properties: {
-              title: '異常通知歷史',
-            },
-          },
-        ],
-      };
-
-      const newSpreadsheet = await sheetsFetch(createUrl, accessToken, {
-        method: 'POST',
-        body: JSON.stringify(createBody),
-      });
-
-      const spreadsheetId = newSpreadsheet.spreadsheetId;
-      const sheetsInfo = newSpreadsheet.sheets.map((s: any) => ({
+      const metaUrl = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}?fields=sheets.properties(sheetId,title)`;
+      const meta = await sheetsFetch(metaUrl, accessToken);
+      const sheetsInfo = meta.sheets.map((s: any) => ({
         title: s.properties.title,
         sheetId: s.properties.sheetId,
       }));
 
-      // Initialize headers for both tabs
-      await this.initializeSheetHeaders(accessToken, spreadsheetId, true, true);
+      let recordsSheetName = '血壓記錄';
+      const formResponseSheet = sheetsInfo.find((s: any) =>
+        s.title.includes('表單回應') ||
+        s.title.includes('Form Responses') ||
+        s.title.includes('Responses') ||
+        s.title === '血壓記錄' ||
+        s.title === '血壓紀錄'
+      );
+      if (formResponseSheet) {
+        recordsSheetName = formResponseSheet.title;
+      } else if (sheetsInfo.length > 0) {
+        recordsSheetName = sheetsInfo[0].title;
+      }
 
-      return { spreadsheetId, sheetsInfo, recordsSheetName: '血壓記錄' };
+      const hasRecordsTab = sheetsInfo.some((s: any) =>
+        s.title === '血壓記錄' ||
+        s.title.includes('表單回應') ||
+        s.title.includes('Form Responses') ||
+        s.title.includes('Responses') ||
+        s.title === '血壓紀錄'
+      );
+      const hasAlertsTab = sheetsInfo.some((s: any) => s.title === '異常通知歷史');
+
+      if (!hasRecordsTab || !hasAlertsTab) {
+        const requests: any[] = [];
+        if (!hasRecordsTab) {
+          requests.push({ addSheet: { properties: { title: '血壓記錄' } } });
+          recordsSheetName = '血壓記錄';
+        }
+        if (!hasAlertsTab) {
+          requests.push({ addSheet: { properties: { title: '異常通知歷史' } } });
+        }
+        const updateUrl = `https://sheets.googleapis.com/v4/spreadsheets/${encodeURIComponent(spreadsheetId)}:batchUpdate`;
+        await sheetsFetch(updateUrl, accessToken, {
+          method: 'POST',
+          body: JSON.stringify({ requests }),
+        });
+        const updatedMeta = await sheetsFetch(metaUrl, accessToken);
+        const updatedSheetsInfo = updatedMeta.sheets.map((s: any) => ({
+          title: s.properties.title,
+          sheetId: s.properties.sheetId,
+        }));
+        await this.initializeSheetHeaders(accessToken, spreadsheetId, !hasRecordsTab, !hasAlertsTab);
+        return { spreadsheetId, sheetsInfo: updatedSheetsInfo, recordsSheetName };
+      }
+      return { spreadsheetId, sheetsInfo, recordsSheetName };
     } catch (err: any) {
-      console.error('findOrCreateSpreadsheet error:', err);
+      console.error('loadSpreadsheet error:', err);
+      if (/Google Sheets API Error \((403|404)\)/.test(err?.message || '')) {
+        throw new Error('目前 Google 帳號無法存取指定的健康紀錄試算表，請確認試算表已分享給此帳號。');
+      }
       throw err;
     }
   },
-
   /**
    * Write column headers to sheets
    */

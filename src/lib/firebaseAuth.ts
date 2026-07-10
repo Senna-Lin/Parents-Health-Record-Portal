@@ -6,9 +6,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
 const provider = new GoogleAuthProvider();
-// Request Google Sheets and Drive scopes
-provider.addScope('https://www.googleapis.com/auth/drive');
-provider.addScope('https://www.googleapis.com/auth/drive.file');
+// Request only the Google Sheets scope. Spreadsheet IDs are configured explicitly.
 provider.addScope('https://www.googleapis.com/auth/spreadsheets');
 
 let isSigningIn = false;

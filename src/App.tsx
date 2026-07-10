@@ -173,10 +173,16 @@ export default function App() {
     setIsSyncing(true);
     setSyncError(null);
     try {
-      // Find or create spreadsheet for 父親 (Father)
-      const fatherResult = await sheetsService.findOrCreateSpreadsheet(accessTokenString, 'Grandfather’s health record (回覆)');
-      // Find or create spreadsheet for 母親 (Mother)
-      const motherResult = await sheetsService.findOrCreateSpreadsheet(accessTokenString, 'Grandmother’s health record (回覆)');
+      const fatherSpreadsheetId = import.meta.env.VITE_FATHER_SPREADSHEET_ID?.trim();
+      const motherSpreadsheetId = import.meta.env.VITE_MOTHER_SPREADSHEET_ID?.trim();
+      if (!fatherSpreadsheetId || !motherSpreadsheetId) {
+        throw new Error('尚未設定父親或母親的 Google Sheet ID，請在環境變數中設定 VITE_FATHER_SPREADSHEET_ID / VITE_MOTHER_SPREADSHEET_ID。');
+      }
+
+      const [fatherResult, motherResult] = await Promise.all([
+        sheetsService.loadSpreadsheet(accessTokenString, fatherSpreadsheetId),
+        sheetsService.loadSpreadsheet(accessTokenString, motherSpreadsheetId),
+      ]);
 
       const configMap = {
         '父親': fatherResult,
@@ -213,7 +219,7 @@ export default function App() {
       setAlerts(sortedAlerts);
     } catch (err: any) {
       console.error('Sync Google Sheets error:', err);
-      setSyncError(`試算表同步失敗。請確保網路連線，或重新登入授予雲端硬碟權限。`);
+      setSyncError(err?.message || '連接 Google Sheets 時發生錯誤。');
     } finally {
       setIsSyncing(false);
     }
